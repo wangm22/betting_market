@@ -1,0 +1,5 @@
+# SITE_ADDRESS comes from deploy/.env on the server, e.g. yourname.duckdns.org
+# Caddy obtains and renews the Let's Encrypt certificate automatically.
+{$SITE_ADDRESS} {
+	reverse_proxy app:3000
+}
