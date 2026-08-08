@@ -32,7 +32,7 @@ export function SettleForm({
             onClick={(e) => {
               if (
                 !window.confirm(
-                  "Settle this market as YES (100)? This cannot be undone.",
+                  "Settle this market as YES (10)? This cannot be undone.",
                 )
               ) {
                 e.preventDefault();
@@ -40,7 +40,7 @@ export function SettleForm({
             }}
             className="rounded bg-emerald-600 px-4 py-2 font-medium text-white transition-opacity hover:bg-emerald-700 disabled:opacity-50"
           >
-            Settle YES (100)
+            Settle YES (10)
           </button>
           <button
             type="submit"

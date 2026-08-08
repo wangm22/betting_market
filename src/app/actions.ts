@@ -169,7 +169,9 @@ function parseLeg(
     marketType === "binary" ? parseBinaryPriceC(priceInput) : parseNumericPriceC(priceInput);
   if (priceC === null) {
     if (marketType === "binary") {
-      return { error: `${label} price must be a whole number 1–99.` };
+      return {
+        error: `${label} price must be between 0.01 and 9.99 (up to 2 decimals).`,
+      };
     }
     // Well-formed but rejected means it failed the range check, not the format.
     const outOfRange = parseToHundredths(priceInput) !== null;
@@ -359,7 +361,7 @@ export async function settleMarketAction(
     if (outcome !== "yes" && outcome !== "no") {
       return { error: "Choose an outcome." };
     }
-    settleC = outcome === "yes" ? 10000 : 0;
+    settleC = outcome === "yes" ? 1000 : 0;
   } else {
     const value = String(formData.get("value") ?? "");
     const parsed = parseNumericPriceC(value);

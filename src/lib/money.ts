@@ -25,9 +25,11 @@ export function formatC(c: number): string {
   return neg ? `-${s}` : s;
 }
 
-// Binary prices are whole probability points, so render without decimals.
+// Binary prices live on the 0–10 scale (contracts pay 10 on YES); trim
+// trailing zeros so the book reads "6" / "6.5" / "6.25" rather than "6.00".
 export function formatPrice(c: number, type: "binary" | "numeric"): string {
-  return type === "binary" ? String(c / 100) : formatC(c);
+  if (type === "numeric") return formatC(c);
+  return formatC(c).replace(/\.?0+$/, "") || "0";
 }
 
 // Sizes are whole contracts, 1..MAX_SIZE.
@@ -38,12 +40,12 @@ export function parseSize(input: string): number | null {
   return n >= 1 && n <= MAX_SIZE ? n : null;
 }
 
-// Binary prices: integers 1..99 (probability points), stored as hundredths.
+// Binary prices: 0.01..9.99 (≤2 decimals) on the 0–10 contract scale.
+// 0 and 10 are excluded — "certainly 0/10" is what settlement is for.
 export function parseBinaryPriceC(input: string): number | null {
-  const s = input.trim();
-  if (!/^\d{1,2}$/.test(s)) return null;
-  const n = parseInt(s, 10);
-  return n >= 1 && n <= 99 ? n * 100 : null;
+  const c = parseToHundredths(input);
+  if (c === null) return null;
+  return c >= 1 && c <= 999 ? c : null;
 }
 
 // Numeric prices: ≤2 decimals, may be negative, within ±MAX_NUMERIC_C.

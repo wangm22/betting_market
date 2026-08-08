@@ -35,12 +35,12 @@ describe("tradePnlC", () => {
 // 2. Binary settlement
 // ---------------------------------------------------------------------------
 describe("binary settlement", () => {
-  test("buy 10 @ 37, settle YES (10000) -> +63000", () => {
-    expect(tradePnlC(c(100), c(37), 10)).toBe(63000);
+  test("buy 10 @ 3.7, settle YES (1000) -> +6300", () => {
+    expect(tradePnlC(c(10), c(3.7), 10)).toBe(6300);
   });
 
-  test("same trade, settle NO (0) -> -37000", () => {
-    expect(tradePnlC(c(0), c(37), 10)).toBe(-37000);
+  test("same trade, settle NO (0) -> -3700", () => {
+    expect(tradePnlC(c(0), c(3.7), 10)).toBe(-3700);
   });
 });
 
@@ -180,8 +180,8 @@ describe("foldOpenPositions: net-zero omitted", () => {
 describe("foldLeaderboard", () => {
   test("per-user totals, distinct marketsTraded, sorted desc, sums to exactly 0", () => {
     const rows: SettledTradeRow[] = [
-      // market 10, binary settle YES (10000): user1 buys from user2
-      { buyerId: 1, sellerId: 2, priceC: c(30), size: 10, marketId: 10, settleC: c(100) },
+      // market 10, binary settle YES (1000): user1 buys from user2
+      { buyerId: 1, sellerId: 2, priceC: c(3), size: 10, marketId: 10, settleC: c(10) },
       // market 20, numeric settle 50.00: user2 buys from user3
       { buyerId: 2, sellerId: 3, priceC: c(40), size: 5, marketId: 20, settleC: c(50) },
       // market 20, same settle: user3 buys from user1
@@ -189,18 +189,18 @@ describe("foldLeaderboard", () => {
     ];
 
     // Hand computation:
-    // row1: pnl = (10000-3000)*10 = 70000 -> user1 +70000, user2 -70000
+    // row1: pnl = (1000-300)*10 = 7000 -> user1 +7000, user2 -7000
     // row2: pnl = (5000-4000)*5 = 5000   -> user2 +5000,  user3 -5000
     // row3: pnl = (5000-4500)*8 = 4000   -> user3 +4000,  user1 -4000
-    // user1 total = 70000 - 4000 = 66000, markets {10,20} = 2
-    // user2 total = -70000 + 5000 = -65000, markets {10,20} = 2
+    // user1 total = 7000 - 4000 = 3000, markets {10,20} = 2
+    // user2 total = -7000 + 5000 = -2000, markets {10,20} = 2
     // user3 total = -5000 + 4000 = -1000, markets {20} = 1
     const result = foldLeaderboard(rows);
 
     expect(result).toEqual([
-      { userId: 1, pnlC: 66000, marketsTraded: 2 },
+      { userId: 1, pnlC: 3000, marketsTraded: 2 },
       { userId: 3, pnlC: -1000, marketsTraded: 1 },
-      { userId: 2, pnlC: -65000, marketsTraded: 2 },
+      { userId: 2, pnlC: -2000, marketsTraded: 2 },
     ]);
 
     const grandTotal = result.reduce((sum, r) => sum + r.pnlC, 0);

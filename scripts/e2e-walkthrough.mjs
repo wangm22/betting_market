@@ -593,28 +593,28 @@ async function main() {
       if (!quoteFormPresent) await fail(alicePage, "quote form is visible (#bidPrice present) on a fresh open market");
     });
 
-    // 4. alice submits one two-sided quote: bid 40x10 AND offer 60x10.
-    await runStep("alice submits two-sided quote 40x10 / 60x10 (both rest, no trade)", async () => {
+    // 4. alice submits one two-sided quote: bid 4x10 AND offer 6x10.
+    await runStep("alice submits two-sided quote 4x10 / 6x10 (both rest, no trade)", async () => {
       const msgs = await submitQuoteExpectMessage(
         alicePage,
-        { bidPrice: 40, bidSize: 10, offerPrice: 60, offerSize: 10 },
-        "resting at 40",
-        'success message mentions a resting bid ("resting at 40")',
+        { bidPrice: 4, bidSize: 10, offerPrice: 6, offerSize: 10 },
+        "resting at 4",
+        'success message mentions a resting bid ("resting at 4")',
       );
       const joined = msgs.join(" | ");
-      if (!joined.includes("resting at 60")) {
-        await fail(alicePage, `success message should also mention a resting offer ("resting at 60"); got: ${joined}`);
+      if (!joined.includes("resting at 6")) {
+        await fail(alicePage, `success message should also mention a resting offer ("resting at 6"); got: ${joined}`);
       }
       await expectBook(
         alicePage,
-        [{ price: "40", size: 10 }],
-        [{ price: "60", size: 10 }],
-        "book shows bid level 40 size 10 and offer level 60 size 10",
+        [{ price: "4", size: 10 }],
+        [{ price: "6", size: 10 }],
+        "book shows bid level 4 size 10 and offer level 6 size 10",
       );
     });
 
-    // 5. bob navigates to the market via the /markets list link and bids 45x5.
-    await runStep("bob opens the market via the /markets list link and bids 45x5 (rests)", async () => {
+    // 5. bob navigates to the market via the /markets list link and bids 4.5x5.
+    await runStep("bob opens the market via the /markets list link and bids 4.5x5 (rests)", async () => {
       await bobPage.goto(`${BASE_URL}/markets`, { waitUntil: "domcontentloaded" });
       await expectContains(bobPage, BINARY_TITLE, "/markets list shows the open binary market");
       await clickSelector(bobPage, `a[href="/markets/${binaryMarketId}"]`);
@@ -626,51 +626,51 @@ async function main() {
       );
       await expectContains(bobPage, BINARY_TITLE, "bob is on the correct market detail page");
 
-      await submitQuoteExpectMessage(bobPage, { bidPrice: 45, bidSize: 5 }, "resting at 45", "bob's 45x5 bid rests");
+      await submitQuoteExpectMessage(bobPage, { bidPrice: 4.5, bidSize: 5 }, "resting at 4.5", "bob's 4.5x5 bid rests");
       await expectBook(
         bobPage,
         [
-          { price: "45", size: 5 },
-          { price: "40", size: 10 },
+          { price: "4.5", size: 5 },
+          { price: "4", size: 10 },
         ],
-        [{ price: "60", size: 10 }],
-        "book bids show 45(5) then 40(10)",
+        [{ price: "6", size: 10 }],
+        "book bids show 4.5(5) then 4(10)",
       );
     });
 
-    // 6. bob bids 65x4 -> trades 4 @ 60 (resting price, price improvement).
-    await runStep('bob bids 65x4 -> buys 4 @ 60 (resting price, message says "4 @ 60" not "@ 65")', async () => {
+    // 6. bob bids 6.5x4 -> trades 4 @ 6 (resting price, price improvement).
+    await runStep('bob bids 6.5x4 -> buys 4 @ 6 (resting price, message says "4 @ 6" not "@ 6.5")', async () => {
       const msgs = await submitQuoteExpectMessage(
         bobPage,
-        { bidPrice: 65, bidSize: 4 },
-        "4 @ 60",
-        'fill message contains "4 @ 60"',
+        { bidPrice: 6.5, bidSize: 4 },
+        "4 @ 6",
+        'fill message contains "4 @ 6"',
       );
       const joined = msgs.join(" | ");
-      if (joined.includes("@ 65")) {
-        await fail(bobPage, `fill message must NOT reference the taker's limit price 65 as the fill price; got: ${joined}`);
+      if (joined.includes("@ 6.5")) {
+        await fail(bobPage, `fill message must NOT reference the taker's limit price 6.5 as the fill price; got: ${joined}`);
       }
       await expectBook(
         bobPage,
         [
-          { price: "45", size: 5 },
-          { price: "40", size: 10 },
+          { price: "4.5", size: 5 },
+          { price: "4", size: 10 },
         ],
-        [{ price: "60", size: 6 }],
-        "offers now show 60 with size 6",
+        [{ price: "6", size: 6 }],
+        "offers now show 6 with size 6",
       );
-      await expectContains(bobPage, "bob bought 4 from alice @ 60", "trade tape shows bob bought 4 from alice @ 60");
+      await expectContains(bobPage, "bob bought 4 from alice @ 6", "trade tape shows bob bought 4 from alice @ 6");
     });
 
-    // 7. bob cancels his 45 bid.
-    await runStep("bob cancels his 45 bid; bids show only 40(10)", async () => {
-      await cancelOrderRow(bobPage, "Bid", "45", "cancel bob's 45 bid row in Your open orders");
-      await waitForOrderRowGone(bobPage, "Bid", "45", "bob's 45 bid disappears from Your open orders after cancel");
-      await expectBook(bobPage, [{ price: "40", size: 10 }], [{ price: "60", size: 6 }], "bids show only 40(10) after cancel");
+    // 7. bob cancels his 4.5 bid.
+    await runStep("bob cancels his 4.5 bid; bids show only 4(10)", async () => {
+      await cancelOrderRow(bobPage, "Bid", "4.5", "cancel bob's 4.5 bid row in Your open orders");
+      await waitForOrderRowGone(bobPage, "Bid", "4.5", "bob's 4.5 bid disappears from Your open orders after cancel");
+      await expectBook(bobPage, [{ price: "4", size: 10 }], [{ price: "6", size: 6 }], "bids show only 4(10) after cancel");
     });
 
-    // 8. alice's offer 40x5 self-trades against her own resting bid -> rejected whole.
-    await runStep('alice offer 40x5 is rejected (self-trade, "cancel it first"); book unchanged', async () => {
+    // 8. alice's offer 4x5 self-trades against her own resting bid -> rejected whole.
+    await runStep('alice offer 4x5 is rejected (self-trade, "cancel it first"); book unchanged', async () => {
       // alice's page has been idle (since step 4) while bob traded against her
       // resting orders in steps 5-7. revalidatePath (fired by bob's own
       // successful actions) only invalidates the *server* cache; it doesn't
@@ -681,7 +681,7 @@ async function main() {
       await alicePage.reload({ waitUntil: "domcontentloaded" });
       const msgs = await submitQuoteExpectError(
         alicePage,
-        { offerPrice: 40, offerSize: 5 },
+        { offerPrice: 4, offerSize: 5 },
         "cancel it first",
         'self-trade rejection message contains "cancel it first"',
       );
@@ -690,47 +690,47 @@ async function main() {
       }
       await expectBook(
         alicePage,
-        [{ price: "40", size: 10 }],
-        [{ price: "60", size: 6 }],
-        "book unchanged after rejected self-trade: bid 40(10), offer 60(6)",
+        [{ price: "4", size: 10 }],
+        [{ price: "6", size: 6 }],
+        "book unchanged after rejected self-trade: bid 4(10), offer 6(6)",
       );
     });
 
-    // 9. alice offer 62x5 rests; bob 63x9 sweeps 6@60 + 3@62; alice cancels the remaining 62 offer.
-    await runStep('alice offer 62x5 rests; bob 63x9 sweeps "6 @ 60" + "3 @ 62"; alice cancels remaining 62 offer', async () => {
-      await submitQuoteExpectMessage(alicePage, { offerPrice: 62, offerSize: 5 }, "resting at 62", "alice's 62x5 offer rests");
+    // 9. alice offer 6.2x5 rests; bob 6.3x9 sweeps 6@6 + 3@6.2; alice cancels the remaining 6.2 offer.
+    await runStep('alice offer 6.2x5 rests; bob 6.3x9 sweeps "6 @ 6" + "3 @ 6.2"; alice cancels remaining 6.2 offer', async () => {
+      await submitQuoteExpectMessage(alicePage, { offerPrice: 6.2, offerSize: 5 }, "resting at 6.2", "alice's 6.2x5 offer rests");
       await expectBook(
         alicePage,
-        [{ price: "40", size: 10 }],
+        [{ price: "4", size: 10 }],
         [
-          { price: "60", size: 6 },
-          { price: "62", size: 5 },
+          { price: "6", size: 6 },
+          { price: "6.2", size: 5 },
         ],
-        "offers now show 60(6) and 62(5)",
+        "offers now show 6(6) and 6.2(5)",
       );
 
       const msgs = await submitQuoteExpectMessage(
         bobPage,
-        { bidPrice: 63, bidSize: 9 },
-        "6 @ 60",
-        'bob\'s 63x9 bid message contains "6 @ 60"',
+        { bidPrice: 6.3, bidSize: 9 },
+        "6 @ 6",
+        'bob\'s 6.3x9 bid message contains "6 @ 6"',
       );
-      if (!msgs.join(" | ").includes("3 @ 62")) {
-        await fail(bobPage, `bob's 63x9 fill message should also contain "3 @ 62"; got: ${msgs.join(" | ")}`);
+      if (!msgs.join(" | ").includes("3 @ 6.2")) {
+        await fail(bobPage, `bob's 6.3x9 fill message should also contain "3 @ 6.2"; got: ${msgs.join(" | ")}`);
       }
-      await expectBook(bobPage, [{ price: "40", size: 10 }], [{ price: "62", size: 2 }], "offers now show only 62 size 2");
+      await expectBook(bobPage, [{ price: "4", size: 10 }], [{ price: "6.2", size: 2 }], "offers now show only 6.2 size 2");
 
-      await cancelOrderRow(alicePage, "Offer", "62", "cancel alice's remaining 62 offer");
-      await waitForOrderRowGone(alicePage, "Offer", "62", "alice's 62 offer disappears after cancel");
-      await expectBook(alicePage, [{ price: "40", size: 10 }], [], "offers empty after alice cancels the remaining 62 offer");
+      await cancelOrderRow(alicePage, "Offer", "6.2", "cancel alice's remaining 6.2 offer");
+      await waitForOrderRowGone(alicePage, "Offer", "6.2", "alice's 6.2 offer disappears after cancel");
+      await expectBook(alicePage, [{ price: "4", size: 10 }], [], "offers empty after alice cancels the remaining 6.2 offer");
     });
 
     // 10. alice settles YES.
     await runStep(
-      'alice clicks "Settle YES" (confirm accepted) -> "Settled at 100", forms gone, her 40 bid auto-cancelled',
+      'alice clicks "Settle YES" (confirm accepted) -> "Settled at 10", forms gone, her 4 bid auto-cancelled',
       async () => {
         await clickSelector(alicePage, 'button[name="outcome"][value="yes"]');
-        await expectContains(alicePage, "Settled at 100", 'settled banner shows "Settled at 100"');
+        await expectContains(alicePage, "Settled at 10", 'settled banner shows "Settled at 10"');
         await expectElementMissing(alicePage, "#bidPrice", "quote form is gone after settling");
         await expectElementMissing(alicePage, 'button[name="outcome"]', "settle form is gone after settling");
         await expectBook(alicePage, [], [], "book is empty after settling (resting orders auto-cancelled)");
@@ -791,26 +791,26 @@ async function main() {
     });
 
     // 13. Leaderboard.
-    await runStep('/leaderboard shows bob then alice, "+499.00" / "-499.00"', async () => {
+    await runStep('/leaderboard shows bob then alice, "+36.40" / "-36.40"', async () => {
       await alicePage.goto(`${BASE_URL}/leaderboard`, { waitUntil: "domcontentloaded" });
       const rows = await pollUntil(() => getLeaderboardRows(alicePage), (v) => v.length >= 2);
       if (rows.length < 2) await fail(alicePage, `leaderboard should have at least 2 rows; got ${JSON.stringify(rows)}`);
       const [bobRow, aliceRow] = rows;
-      if (bobRow[1] !== "bob" || bobRow[2] !== "+499.00") {
-        await fail(alicePage, `expected leaderboard row 1 = bob / +499.00; got ${JSON.stringify(bobRow)}`);
+      if (bobRow[1] !== "bob" || bobRow[2] !== "+36.40") {
+        await fail(alicePage, `expected leaderboard row 1 = bob / +36.40; got ${JSON.stringify(bobRow)}`);
       }
-      if (aliceRow[1] !== "alice" || aliceRow[2] !== "-499.00") {
-        await fail(alicePage, `expected leaderboard row 2 = alice / -499.00; got ${JSON.stringify(aliceRow)}`);
+      if (aliceRow[1] !== "alice" || aliceRow[2] !== "-36.40") {
+        await fail(alicePage, `expected leaderboard row 2 = alice / -36.40; got ${JSON.stringify(aliceRow)}`);
       }
     });
 
     // 14. Portfolios.
     await runStep(
-      "/users/alice shows -499.00 total, both markets realized, no open positions; /users/bob mirrors +499.00",
+      "/users/alice shows -36.40 total, both markets realized, no open positions; /users/bob mirrors +36.40",
       async () => {
         await alicePage.goto(`${BASE_URL}/users/alice`, { waitUntil: "domcontentloaded" });
         const alicePnl = await pollUntil(() => getCumulativePnlText(alicePage), (v) => v !== null);
-        if (alicePnl !== "-499.00") await fail(alicePage, `alice's cumulative PnL should read "-499.00"; got "${alicePnl}"`);
+        if (alicePnl !== "-36.40") await fail(alicePage, `alice's cumulative PnL should read "-36.40"; got "${alicePnl}"`);
 
         const aliceOpen = await pollUntil(() => getH2Section(alicePage, "Open positions"), (v) => v !== null);
         if (!aliceOpen || !aliceOpen.empty || aliceOpen.text !== "No open positions.") {
@@ -832,7 +832,7 @@ async function main() {
 
         await bobPage.goto(`${BASE_URL}/users/bob`, { waitUntil: "domcontentloaded" });
         const bobPnl = await pollUntil(() => getCumulativePnlText(bobPage), (v) => v !== null);
-        if (bobPnl !== "+499.00") await fail(bobPage, `bob's cumulative PnL should read "+499.00"; got "${bobPnl}"`);
+        if (bobPnl !== "+36.40") await fail(bobPage, `bob's cumulative PnL should read "+36.40"; got "${bobPnl}"`);
 
         const bobOpen = await pollUntil(() => getH2Section(bobPage, "Open positions"), (v) => v !== null);
         if (!bobOpen || !bobOpen.empty || bobOpen.text !== "No open positions.") {
@@ -856,7 +856,7 @@ async function main() {
         await expectContains(guestPage, NUMERIC_TITLE, "guest sees the settled numeric market listed on /markets");
 
         await guestPage.goto(`${BASE_URL}/markets/${binaryMarketId}`, { waitUntil: "domcontentloaded" });
-        await expectContains(guestPage, "Settled at 100", "guest sees the settled banner on the binary market page");
+        await expectContains(guestPage, "Settled at 10", "guest sees the settled banner on the binary market page");
         await expectElementMissing(guestPage, "#bidPrice", "guest sees no quote form on a settled market");
         await expectElementMissing(guestPage, 'button[name="outcome"]', "guest sees no settle form on a settled market");
         await expectNotContains(guestPage, "Log in to trade", 'guest should not see "Log in to trade" on a settled market');

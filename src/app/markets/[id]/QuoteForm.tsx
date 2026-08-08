@@ -30,12 +30,16 @@ export function QuoteForm({
   }, [state]);
 
   const priceHelp =
-    marketType === "binary" ? "probability 1–99" : `price in ${unit ? unit : "units"}`;
+    marketType === "binary"
+      ? "0.01–9.99, pays 10 if YES"
+      : `price in ${unit ? unit : "units"}`;
   // pattern only fires on non-empty fields, so leaving a whole leg blank stays valid.
   const pricePattern =
-    marketType === "binary" ? "[1-9][0-9]?" : "-?[0-9]{1,7}([.][0-9]{1,2})?";
+    marketType === "binary" ? "[0-9]([.][0-9]{1,2})?" : "-?[0-9]{1,7}([.][0-9]{1,2})?";
   const priceTitle =
-    marketType === "binary" ? "Whole number 1–99" : "Number with up to 2 decimals";
+    marketType === "binary"
+      ? "Number between 0.01 and 9.99"
+      : "Number with up to 2 decimals";
   const sizePattern = "[1-9][0-9]{0,4}";
   const sizeTitle = "Whole number 1–10,000";
 
@@ -57,7 +61,7 @@ export function QuoteForm({
               inputMode="decimal"
               pattern={pricePattern}
               title={priceTitle}
-              placeholder={marketType === "binary" ? "e.g. 60" : "e.g. 27.50"}
+              placeholder={marketType === "binary" ? "e.g. 6" : "e.g. 27.50"}
               className="rounded border border-black/15 px-3 py-2 dark:border-white/20 dark:bg-transparent"
             />
           </div>
@@ -92,7 +96,7 @@ export function QuoteForm({
               inputMode="decimal"
               pattern={pricePattern}
               title={priceTitle}
-              placeholder={marketType === "binary" ? "e.g. 65" : "e.g. 30.00"}
+              placeholder={marketType === "binary" ? "e.g. 6.5" : "e.g. 30.00"}
               className="rounded border border-black/15 px-3 py-2 dark:border-white/20 dark:bg-transparent"
             />
           </div>
