@@ -40,5 +40,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# sqlite database
-data/
+# sqlite database (root only — unanchored "data/" would also ignore src/lib/data/)
+/data/

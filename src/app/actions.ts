@@ -330,6 +330,7 @@ export async function cancelOrderAction(
   }
 
   revalidatePath(`/markets/${marketId}`);
+  revalidatePath(`/users/${user.username}`);
   return { message: "Order cancelled." };
 }
 

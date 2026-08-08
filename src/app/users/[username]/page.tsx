@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CancelButton } from "@/app/markets/[id]/CancelButton";
+import { getUserOpenOrdersAcrossMarkets } from "@/lib/data/orders";
 import { getUserPortfolio } from "@/lib/data/pnl";
 import { getUserByUsername } from "@/lib/data/users";
 import { formatC, formatPrice } from "@/lib/money";
+import { getCurrentUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +47,10 @@ export default async function UserPortfolioPage({
     notFound();
   }
 
+  const viewer = await getCurrentUser();
+  const isOwner = viewer !== null && viewer.id === user.id;
+  const openOrders = isOwner ? getUserOpenOrdersAcrossMarkets(user.id) : [];
+
   const { open, realized, totalPnlC } = getUserPortfolio(user.id);
 
   return (
@@ -55,8 +62,72 @@ export default async function UserPortfolioPage({
         </p>
       </header>
 
+      {isOwner ? (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">Open orders</h2>
+          {openOrders.length === 0 ? (
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              No working orders.
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-black/10 text-left text-xs text-zinc-500 dark:border-white/15 dark:text-zinc-400">
+                  <th className="py-2 font-medium">Market</th>
+                  <th className="py-2 font-medium">Side</th>
+                  <th className="py-2 font-medium">Price</th>
+                  <th className="py-2 font-medium">Remaining</th>
+                  <th className="py-2 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {openOrders.map((view) => (
+                  <tr
+                    key={view.order.id}
+                    className="border-b border-black/5 dark:border-white/10"
+                  >
+                    <td className="py-2">
+                      <Link
+                        href={`/markets/${view.marketId}`}
+                        className="font-medium hover:underline"
+                      >
+                        {view.title}
+                      </Link>
+                    </td>
+                    <td className="py-2">
+                      <span
+                        className={
+                          view.order.side === "buy"
+                            ? "font-medium text-emerald-700 dark:text-emerald-400"
+                            : "font-medium text-red-700 dark:text-red-400"
+                        }
+                      >
+                        {view.order.side === "buy" ? "Bid" : "Offer"}
+                      </span>
+                    </td>
+                    <td className="py-2">
+                      {formatPrice(view.order.price_c, view.type)}
+                      {view.unit ? ` ${view.unit}` : ""}
+                    </td>
+                    <td className="py-2">
+                      {view.order.remaining} of {view.order.size}
+                    </td>
+                    <td className="py-2 text-right">
+                      <CancelButton orderId={view.order.id} marketId={view.marketId} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      ) : null}
+
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Open positions</h2>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          Positions appear once one of your quotes trades.
+        </p>
         {open.length === 0 ? (
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             No open positions.

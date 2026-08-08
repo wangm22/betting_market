@@ -311,21 +311,38 @@ async function expectBook(page, expectedBids, expectedOffers, expectation, timeo
   );
 }
 
-// Generic "<h2>Heading</h2>" + (<p>empty-state text</p> | <table>) reader,
-// used for "Your open orders", "Open positions", "Realized PnL". Returns
-// null if the heading itself isn't present (e.g. "Your open orders" is only
-// rendered at all when there's at least one open order).
+// Generic "<h2>Heading</h2>" + (zero or more leading <p> + (empty-state <p>
+// | <table>)) reader, used for "Your open orders", "Open orders", "Open
+// positions", "Realized PnL". Returns null if the heading itself isn't
+// present (e.g. "Your open orders" is only rendered at all when there's at
+// least one open order).
+//
+// Walks past every *leading* <p> sibling first (tracking the last one seen)
+// before deciding what the section actually shows: "Open positions" always
+// renders a fixed muted explainer <p> ("Positions appear once one of your
+// quotes trades.") immediately after its h2, ahead of the real conditional
+// content, so a naive "next sibling" read would grab that explainer instead
+// of the empty-state text or the data table. Landing on a <table> means
+// there IS data (the leading <p> explainer, if any, is just copy and gets
+// ignored); otherwise the last <p> walked past *is* the empty-state text.
 async function getH2Section(page, heading) {
   return page.evaluate((h2Text) => {
     const h2 = Array.from(document.querySelectorAll("h2")).find((h) => h.textContent.trim() === h2Text);
     if (!h2) return null;
-    const sib = h2.nextElementSibling;
-    if (!sib) return null;
-    if (sib.tagName === "P") return { empty: true, text: sib.textContent.trim() };
-    const rows = Array.from(sib.querySelectorAll("tbody tr")).map((tr) =>
-      Array.from(tr.querySelectorAll("td")).map((td) => td.textContent.trim()),
-    );
-    return { empty: false, rows };
+    let sib = h2.nextElementSibling;
+    let lastP = null;
+    while (sib && sib.tagName === "P") {
+      lastP = sib;
+      sib = sib.nextElementSibling;
+    }
+    if (sib && sib.tagName === "TABLE") {
+      const rows = Array.from(sib.querySelectorAll("tbody tr")).map((tr) =>
+        Array.from(tr.querySelectorAll("td")).map((td) => td.textContent.trim()),
+      );
+      return { empty: false, rows };
+    }
+    if (lastP) return { empty: true, text: lastP.textContent.trim() };
+    return null;
   }, heading);
 }
 
@@ -364,6 +381,54 @@ async function waitForOrderRowGone(page, side, price, expectation, timeout = DEF
       return !rows.some((tr) => {
         const tds = tr.querySelectorAll("td");
         return tds[0].textContent.trim() === sideText && tds[1].textContent.trim() === priceText;
+      });
+    },
+    [side, price],
+    expectation,
+    timeout,
+  );
+}
+
+// Same idea as cancelOrderRow/waitForOrderRowGone above, but for the
+// portfolio page's "Open orders" table (/users/<name>), which has an extra
+// leading Market column ahead of Side/Price — Side is td[1] and Price is
+// td[2] there, versus td[0]/td[1] on the market page's own "Your open
+// orders" table.
+async function cancelPortfolioOrderRow(page, side, price, expectation) {
+  const ok = await page.evaluate(
+    (sideText, priceText) => {
+      const h2 = Array.from(document.querySelectorAll("h2")).find((h) => h.textContent.trim() === "Open orders");
+      if (!h2) return false;
+      const table = h2.nextElementSibling;
+      if (!table || table.tagName !== "TABLE") return false;
+      const row = Array.from(table.querySelectorAll("tbody tr")).find((tr) => {
+        const tds = tr.querySelectorAll("td");
+        return tds[1].textContent.trim() === sideText && tds[2].textContent.trim() === priceText;
+      });
+      if (!row) return false;
+      const btn = row.querySelector('button[type="submit"]');
+      if (!btn) return false;
+      btn.click();
+      return true;
+    },
+    side,
+    price,
+  );
+  if (!ok) await fail(page, expectation ?? `a "${side} ${price}" row exists in "Open orders" (to cancel it)`);
+}
+
+async function waitForPortfolioOrderRowGone(page, side, price, expectation, timeout = DEFAULT_WAIT_TIMEOUT_MS) {
+  await waitFor(
+    page,
+    (sideText, priceText) => {
+      const h2 = Array.from(document.querySelectorAll("h2")).find((h) => h.textContent.trim() === "Open orders");
+      if (!h2) return true; // whole section gone -> definitely gone
+      const table = h2.nextElementSibling;
+      if (!table || table.tagName !== "TABLE") return true;
+      const rows = Array.from(table.querySelectorAll("tbody tr"));
+      return !rows.some((tr) => {
+        const tds = tr.querySelectorAll("td");
+        return tds[1].textContent.trim() === sideText && tds[2].textContent.trim() === priceText;
       });
     },
     [side, price],
@@ -783,14 +848,100 @@ async function main() {
       },
     );
 
-    // 12. bob settles the numeric market at 27.5.
+    // 12. Portfolio "Open orders": alice's own /users/alice view lists both
+    // resting N orders (plus the "Open positions" explainer); bob's and a
+    // logged-out guest's view of the same page stay anonymous (no "Open
+    // orders" section at all — same anonymity as the order book and the
+    // market page's own "Your open orders"). alice then cancels her resting
+    // 30.00 offer FROM THE PORTFOLIO PAGE, which removes it from market N's
+    // book ahead of bob settling N in the next step.
+    await runStep(
+      'portfolio "Open orders": alice sees her own 2 resting N orders + explainer, bob/guest see neither, alice cancels her 30.00 offer from the portfolio page',
+      async () => {
+        await alicePage.goto(`${BASE_URL}/users/alice`, { waitUntil: "domcontentloaded" });
+        await expectContains(alicePage, "Open orders", 'alice\'s own /users/alice shows an "Open orders" section');
+        await expectContains(
+          alicePage,
+          "Positions appear once one of your quotes trades.",
+          '/users/alice shows the "Positions appear once one of your quotes trades." explainer under "Open positions"',
+        );
+
+        const aliceOrders = await pollUntil(
+          () => getH2Section(alicePage, "Open orders"),
+          (v) => v !== null && !v.empty && v.rows.length >= 2,
+        );
+        if (!aliceOrders || aliceOrders.empty || aliceOrders.rows.length !== 2) {
+          await fail(
+            alicePage,
+            `alice's "Open orders" should list exactly 2 rows for market N; got ${JSON.stringify(aliceOrders)}`,
+          );
+        }
+        const bidRow = aliceOrders.rows.find((r) => r[1] === "Bid");
+        const offerRow = aliceOrders.rows.find((r) => r[1] === "Offer");
+        if (!bidRow || bidRow[0] !== NUMERIC_TITLE || bidRow[2] !== "20.00 min" || bidRow[3] !== "1 of 3") {
+          await fail(
+            alicePage,
+            `expected a Bid row [${NUMERIC_TITLE}, Bid, "20.00 min", "1 of 3"]; got ${JSON.stringify(bidRow)}`,
+          );
+        }
+        if (!offerRow || offerRow[0] !== NUMERIC_TITLE || offerRow[2] !== "30.00 min" || offerRow[3] !== "3 of 3") {
+          await fail(
+            alicePage,
+            `expected an Offer row [${NUMERIC_TITLE}, Offer, "30.00 min", "3 of 3"]; got ${JSON.stringify(offerRow)}`,
+          );
+        }
+
+        // Anonymity: bob (and a logged-out guest) loading alice's profile
+        // get a 200 with positions/realized only — no "Open orders" section.
+        await bobPage.goto(`${BASE_URL}/users/alice`, { waitUntil: "domcontentloaded" });
+        await expectContains(bobPage, "Cumulative PnL:", 'bob\'s view of /users/alice loads (shows "Cumulative PnL:")');
+        await expectNotContains(bobPage, "Open orders", 'bob must NOT see an "Open orders" section on alice\'s profile');
+
+        await guestPage.goto(`${BASE_URL}/users/alice`, { waitUntil: "domcontentloaded" });
+        await expectContains(guestPage, "Cumulative PnL:", 'guest\'s view of /users/alice loads (shows "Cumulative PnL:")');
+        await expectNotContains(guestPage, "Open orders", 'guest must NOT see an "Open orders" section on alice\'s profile');
+
+        // Cancel alice's resting 30.00 offer FROM THE PORTFOLIO PAGE (reuses
+        // the market page's CancelButton/cancelOrderAction; alicePage is
+        // still sitting on /users/alice from above).
+        await cancelPortfolioOrderRow(alicePage, "Offer", "30.00 min", 'cancel alice\'s "30.00 min" offer row in "Open orders"');
+        await waitForPortfolioOrderRowGone(
+          alicePage,
+          "Offer",
+          "30.00 min",
+          'alice\'s "30.00 min" offer row disappears from "Open orders" after cancel',
+        );
+
+        const afterCancel = await getH2Section(alicePage, "Open orders");
+        if (!afterCancel || afterCancel.empty || afterCancel.rows.length !== 1 || afterCancel.rows[0][1] !== "Bid") {
+          await fail(
+            alicePage,
+            `after cancelling, alice's "Open orders" should show exactly 1 remaining Bid row; got ${JSON.stringify(afterCancel)}`,
+          );
+        }
+
+        // The cancelled offer is also gone from market N's live book (only
+        // the resting 20.00x1 bid remains, offers empty). Re-fetch via
+        // bobPage, which also puts bob back on the numeric market detail
+        // page for the settle step right below.
+        await bobPage.goto(`${BASE_URL}/markets/${numericMarketId}`, { waitUntil: "domcontentloaded" });
+        await expectBook(
+          bobPage,
+          [{ price: "20.00", size: 1 }],
+          [],
+          "numeric book shows only the 20.00x1 bid after alice cancels her 30.00 offer from the portfolio page",
+        );
+      },
+    );
+
+    // 13. bob settles the numeric market at 27.5.
     await runStep('bob settles the numeric market at 27.5 (confirm accepted) -> settled banner shows "27.50"', async () => {
       await setValue(bobPage, "#value", "27.5");
       await clickSubmitNear(bobPage, "#value");
       await expectContains(bobPage, "Settled at 27.50", 'numeric settled banner shows "Settled at 27.50"');
     });
 
-    // 13. Leaderboard.
+    // 14. Leaderboard.
     await runStep('/leaderboard shows bob then alice, "+36.40" / "-36.40"', async () => {
       await alicePage.goto(`${BASE_URL}/leaderboard`, { waitUntil: "domcontentloaded" });
       const rows = await pollUntil(() => getLeaderboardRows(alicePage), (v) => v.length >= 2);
@@ -804,13 +955,25 @@ async function main() {
       }
     });
 
-    // 14. Portfolios.
+    // 15. Portfolios.
     await runStep(
-      "/users/alice shows -36.40 total, both markets realized, no open positions; /users/bob mirrors +36.40",
+      "/users/alice shows -36.40 total, both markets realized, no open positions, Open orders now empty; /users/bob mirrors +36.40",
       async () => {
         await alicePage.goto(`${BASE_URL}/users/alice`, { waitUntil: "domcontentloaded" });
         const alicePnl = await pollUntil(() => getCumulativePnlText(alicePage), (v) => v !== null);
         if (alicePnl !== "-36.40") await fail(alicePage, `alice's cumulative PnL should read "-36.40"; got "${alicePnl}"`);
+
+        // Both markets are now settled, which cancels every resting order —
+        // alice cancelled her 30.00 offer herself above, and settlement just
+        // cancelled her remaining 20.00 bid, so the section is back to its
+        // empty state (still rendered, since alice is the profile owner).
+        const aliceOrdersFinal = await pollUntil(() => getH2Section(alicePage, "Open orders"), (v) => v !== null);
+        if (!aliceOrdersFinal || !aliceOrdersFinal.empty || aliceOrdersFinal.text !== "No working orders.") {
+          await fail(
+            alicePage,
+            `alice's "Open orders" should read "No working orders." now that both markets are settled; got ${JSON.stringify(aliceOrdersFinal)}`,
+          );
+        }
 
         const aliceOpen = await pollUntil(() => getH2Section(alicePage, "Open positions"), (v) => v !== null);
         if (!aliceOpen || !aliceOpen.empty || aliceOpen.text !== "No open positions.") {
@@ -847,7 +1010,7 @@ async function main() {
       },
     );
 
-    // 15. Logged-out spot-check.
+    // 16. Logged-out spot-check.
     await runStep(
       "logged-out guest can browse /markets, the settled market (no forms), /leaderboard; /markets/new redirects to /login",
       async () => {
@@ -875,10 +1038,10 @@ async function main() {
       },
     );
 
-    console.log(`\nAll steps passed: ${stepNum}/15.`);
+    console.log(`\nAll steps passed: ${stepNum}/16.`);
   } catch (err) {
     exitCode = 1;
-    console.error(`\ne2e walkthrough FAILED at STEP ${stepNum} (${Math.max(stepNum - 1, 0)}/15 prior steps passed).`);
+    console.error(`\ne2e walkthrough FAILED at STEP ${stepNum} (${Math.max(stepNum - 1, 0)}/16 prior steps passed).`);
     if (!(err instanceof ExpectationError)) {
       console.error(err && err.stack ? err.stack : String(err));
     }
